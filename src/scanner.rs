@@ -100,10 +100,6 @@ impl Scanner {
         &self.tokens
     }
 
-    fn at_end(&self) -> bool {
-        self.current >= self.source.len()
-    }
-
     fn scan_token(&mut self) {
         let c = self.advance();
         match c {
@@ -117,8 +113,53 @@ impl Scanner {
             '+' => self.add_token(TokenType::Plus, None),
             ';' => self.add_token(TokenType::Semicolon, None),
             '*' => self.add_token(TokenType::Star, None),
+            '!' => {
+                let next_is_equal = self.match_char('=');
+                if next_is_equal {
+                    self.add_token(TokenType::BangEqual, None);
+                } else {
+                    self.add_token(TokenType::Bang, None);
+                }
+            }
+            '=' => {
+                let next_is_equal = self.match_char('=');
+                if next_is_equal {
+                    self.add_token(TokenType::EqualEqual, None);
+                } else {
+                    self.add_token(TokenType::Equal, None);
+                }
+            }
+            '>' => {
+                let next_is_equal = self.match_char('=');
+                if next_is_equal {
+                    self.add_token(TokenType::GreaterEqual, None);
+                } else {
+                    self.add_token(TokenType::Greater, None);
+                }
+            }
+            '<' => {
+                let next_is_equal = self.match_char('=');
+                if next_is_equal {
+                    self.add_token(TokenType::LessEqual, None);
+                } else {
+                    self.add_token(TokenType::Less, None);
+                }
+            }
+            '/' => {
+                if self.match_char('/') {
+                    while self.peek() != '\n' && !self.at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add_token(TokenType::Slash, None);
+                }
+            }
+            ' ' | '\r' | '\t' => (),
             '\n' => self.line += 1,
-            _ => unimplemented!(),
+            _ => {
+                // TODO: add error logging
+                unimplemented!()
+            }
         };
     }
 
@@ -128,9 +169,31 @@ impl Scanner {
         ch
     }
 
+    fn match_char(&mut self, expected: char) -> bool {
+        if self.at_end() {
+            return false;
+        }
+        if self.source[self.current] != expected {
+            return false;
+        }
+        self.current += 1;
+        true
+    }
+
+    fn peek(&self) -> char {
+        if self.at_end() {
+            return '\0';
+        }
+        self.source[self.current]
+    }
+
     fn add_token(&mut self, token_type: TokenType, literal: Option<String>) {
         let lexeme = &self.source[self.start..self.current];
         let token = Token::new(token_type, lexeme.iter().collect(), literal, self.line);
         self.tokens.push(token);
+    }
+
+    fn at_end(&self) -> bool {
+        self.current >= self.source.len()
     }
 }
