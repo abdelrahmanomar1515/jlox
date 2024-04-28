@@ -1,17 +1,18 @@
 use crate::token::Token;
 
-pub enum Expr<'a> {
+#[derive(Clone)]
+pub enum Expr {
     Binary {
-        left: &'a Expr<'a>,
+        left: Box<Expr>,
         operator: Token,
-        right: &'a Expr<'a>,
+        right: Box<Expr>,
     },
     Unary {
         operator: Token,
-        right: &'a Expr<'a>,
+        right: Box<Expr>,
     },
     Grouping {
-        expr: &'a Expr<'a>,
+        expr: Box<Expr>,
     },
     Literal {
         value: Token,

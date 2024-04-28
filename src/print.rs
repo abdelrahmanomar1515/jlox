@@ -4,7 +4,7 @@ pub trait Print {
     fn print(&self) -> String;
 }
 
-impl Print for Expr<'_> {
+impl Print for Expr {
     fn print(&self) -> String {
         match self {
             Expr::Binary {
@@ -30,26 +30,26 @@ mod test {
     #[test]
     fn it_prints_tree() {
         let expr = Expr::Binary {
-            left: &Expr::Unary {
+            left: Box::new(Expr::Unary {
                 operator: Token {
                     token_type: TokenType::Minus,
                     text: "-".to_string(),
                     line: 1,
                 },
-                right: &Expr::Literal {
+                right: Box::new(Expr::Literal {
                     value: Token {
                         token_type: TokenType::Number(123.0),
                         text: "123.0".to_string(),
                         line: 1,
                     },
-                },
-            },
+                }),
+            }),
             operator: Token::new(TokenType::Star, "*".to_string(), 1),
-            right: &Expr::Grouping {
-                expr: &Expr::Literal {
+            right: Box::new(Expr::Grouping {
+                expr: Box::new(Expr::Literal {
                     value: Token::new(TokenType::Number(45.21), 45.21.to_string(), 1),
-                },
-            },
+                }),
+            }),
         };
 
         assert_eq!("(* (- 123.0) (group 45.21))", expr.print())
