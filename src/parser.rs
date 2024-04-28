@@ -23,15 +23,15 @@ impl<'a> Parser<'a> {
     fn parse_equality(&mut self) -> Result<Expr> {
         let mut expr = self.parse_comparison()?;
 
-        while let TokenType::BangEqual | TokenType::EqualEqual = &self.peek().token_type {
+        while let TokenType::BangEqual | TokenType::EqualEqual = self.peek().token_type {
             self.advance();
             let operator = self.previous();
             let right = self.parse_comparison()?;
 
             expr = Expr::Binary {
-                left: Box::new(expr.clone()),
+                left: Box::new(expr),
                 operator,
-                right: Box::new(right.clone()),
+                right: Box::new(right),
             }
         }
 
@@ -44,16 +44,16 @@ impl<'a> Parser<'a> {
         while let TokenType::Greater
         | TokenType::GreaterEqual
         | TokenType::Less
-        | TokenType::LessEqual = &self.peek().token_type
+        | TokenType::LessEqual = self.peek().token_type
         {
             self.advance();
             let operator = self.previous();
             let right = self.parse_term()?;
 
             expr = Expr::Binary {
-                left: Box::new(expr.clone()),
+                left: Box::new(expr),
                 operator,
-                right: Box::new(right.clone()),
+                right: Box::new(right),
             }
         }
         Ok(expr)
@@ -62,15 +62,15 @@ impl<'a> Parser<'a> {
     fn parse_term(&mut self) -> Result<Expr> {
         let mut expr = self.parse_factor()?;
 
-        while let TokenType::Minus | TokenType::Plus = &self.peek().token_type {
+        while let TokenType::Minus | TokenType::Plus = self.peek().token_type {
             self.advance();
             let operator = self.previous();
             let right = self.parse_factor()?;
 
             expr = Expr::Binary {
-                left: Box::new(expr.clone()),
+                left: Box::new(expr),
                 operator,
-                right: Box::new(right.clone()),
+                right: Box::new(right),
             }
         }
         Ok(expr)
@@ -79,29 +79,32 @@ impl<'a> Parser<'a> {
     fn parse_factor(&mut self) -> Result<Expr> {
         let mut expr = self.parse_unary()?;
 
-        while let TokenType::Slash | TokenType::Star = &self.peek().token_type {
+        while let operator @ Token {
+            token_type: TokenType::Slash | TokenType::Star,
+            ..
+        } = self.peek()
+        {
             self.advance();
-            let operator = self.previous();
             let right = self.parse_unary()?;
 
             expr = Expr::Binary {
-                left: Box::new(expr.clone()),
+                left: Box::new(expr),
                 operator,
-                right: Box::new(right.clone()),
+                right: Box::new(right),
             }
         }
         Ok(expr)
     }
 
     fn parse_unary(&mut self) -> Result<Expr> {
-        if let TokenType::Bang | TokenType::Minus = &self.peek().token_type {
+        if let TokenType::Bang | TokenType::Minus = self.peek().token_type {
             self.advance();
             let operator = self.previous();
             let right = self.parse_unary()?;
 
             return Ok(Expr::Unary {
                 operator,
-                right: Box::new(right.clone()),
+                right: Box::new(right),
             });
         }
         self.parse_primary()
