@@ -1,73 +1,5 @@
-use core::f64;
+use crate::token::*;
 use std::collections::HashMap;
-
-#[derive(Debug, Clone)]
-enum TokenType {
-    // Single-character tokens.
-    LeftParen,
-    RightParen,
-    LeftBrace,
-    RightBrace,
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    Semicolon,
-    Slash,
-    Star,
-
-    // One or two character tokens.
-    Bang,
-    BangEqual,
-    Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-
-    // Literals.
-    Identifier,
-    String(String),
-    Number(f64),
-
-    // Keywords.
-    And,
-    Class,
-    Else,
-    False,
-    Fun,
-    For,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
-
-    Eof,
-}
-
-#[derive(Debug, Clone)]
-pub struct Token {
-    token_type: TokenType,
-    text: String,
-    line: usize,
-}
-
-impl Token {
-    fn new(token_type: TokenType, text: String, line: usize) -> Self {
-        Self {
-            token_type,
-            text,
-            line,
-        }
-    }
-}
 
 #[derive(Default)]
 pub struct Scanner {
@@ -114,11 +46,8 @@ impl Scanner {
             self.start = self.current;
             self.scan_token()
         }
-        self.tokens.push(Token {
-            token_type: TokenType::Eof,
-            text: "".to_string(),
-            line: self.line,
-        });
+        self.tokens
+            .push(Token::new(TokenType::Eof, "".to_string(), self.line));
         &self.tokens
     }
 

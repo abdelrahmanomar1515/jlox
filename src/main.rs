@@ -1,7 +1,4 @@
-mod scanner;
-
-use jlox::Result;
-use scanner::Scanner;
+use jlox::{scanner::Scanner, Result};
 use std::{
     env::args,
     fs,
