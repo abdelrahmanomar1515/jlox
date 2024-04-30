@@ -1,4 +1,4 @@
-use jlox::print::Print;
+use jlox::print::Printer;
 use jlox::{parser::Parser, scanner::Scanner, Result};
 use std::{
     env::args,
@@ -36,6 +36,7 @@ fn run(source: String) -> Result<()> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
-    println!("{}", parser.parse()?.print());
+    let mut printer = Printer;
+    println!("{}", printer.print(&parser.parse()?));
     Ok(())
 }

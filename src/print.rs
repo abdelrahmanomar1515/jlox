@@ -1,30 +1,46 @@
-use crate::expr::Expr;
+use crate::expr::{Expr, Visitor};
 
-pub trait Print {
-    fn print(&self) -> String;
+pub struct Printer;
+impl Printer {
+    pub fn print(&mut self, expr: &Expr) -> String {
+        expr.accept(self)
+    }
 }
 
-impl Print for Expr {
-    fn print(&self) -> String {
-        match self {
-            Expr::Binary {
-                left,
-                operator,
-                right,
-            } => format!("({} {} {})", operator.text, left.print(), right.print()),
-            Expr::Unary { operator, right } => {
-                format!("({} {})", operator.text, right.print())
-            }
-            Expr::Grouping { expr } => format!("(group {})", expr.print()),
-            Expr::Literal { value } => value.text.clone(),
-        }
+impl Visitor for Printer {
+    type Out = String;
+
+    fn visit_literal(&mut self, value: &crate::token::Token) -> Self::Out {
+        value.text.clone()
+    }
+
+    fn visit_unary(&mut self, operator: &crate::token::Token, right: &Expr) -> Self::Out {
+        format!("({} {})", operator.text, right.accept(self))
+    }
+
+    fn visit_grouping(&mut self, expr: &Expr) -> Self::Out {
+        format!("(group {})", expr.accept(self))
+    }
+
+    fn visit_binary(
+        &mut self,
+        left: &Expr,
+        operator: &crate::token::Token,
+        right: &Expr,
+    ) -> Self::Out {
+        format!(
+            "({} {} {})",
+            operator.text,
+            left.accept(self),
+            right.accept(self)
+        )
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::expr::*;
-    use crate::print::*;
+    use crate::print::Printer;
     use crate::token::*;
 
     #[test]
@@ -52,6 +68,8 @@ mod test {
             }),
         };
 
-        assert_eq!("(* (- 123.0) (group 45.21))", expr.print())
+        let mut printer = Printer;
+
+        assert_eq!("(* (- 123.0) (group 45.21))", printer.print(&expr))
     }
 }
