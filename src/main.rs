@@ -1,4 +1,4 @@
-use jlox::print::Printer;
+use jlox::interpreter::Interpreter;
 use jlox::{parser::Parser, scanner::Scanner, Result};
 use std::{
     env::args,
@@ -22,7 +22,9 @@ fn run_prompt() -> Result<()> {
     for line in stdin.lock().lines() {
         print!("> ");
         io::stdout().flush()?;
-        run(line?)?
+        if let Err(err) = run(line?) {
+            eprintln!("{err:?}")
+        }
     }
     Ok(())
 }
@@ -36,7 +38,7 @@ fn run(source: String) -> Result<()> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
-    let mut printer = Printer;
-    println!("{}", printer.print(&parser.parse()?));
+    let mut interpreter = Interpreter;
+    println!("{:?}", interpreter.evaluate(&parser.parse()?)?);
     Ok(())
 }

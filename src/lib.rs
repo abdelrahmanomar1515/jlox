@@ -1,6 +1,8 @@
 use derive_more::From;
+use token::Token;
 
 pub mod expr;
+pub mod interpreter;
 pub mod parser;
 pub mod print;
 pub mod scanner;
@@ -17,6 +19,20 @@ pub enum Error {
 
     FromUtf8Error(std::string::FromUtf8Error),
     IO(std::io::Error),
+
+    RuntimeError {
+        line: usize,
+        msg: String,
+    },
+}
+
+impl Error {
+    pub fn runtime(token: &Token, message: &str) -> Error {
+        Error::RuntimeError {
+            line: token.line,
+            msg: message.to_string(),
+        }
+    }
 }
 
 impl core::fmt::Display for Error {
