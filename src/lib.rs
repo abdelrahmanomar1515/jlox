@@ -6,6 +6,7 @@ pub mod interpreter;
 pub mod parser;
 pub mod print;
 pub mod scanner;
+pub mod stmt;
 pub mod token;
 
 pub type Result<T> = core::result::Result<T, Error>;

@@ -1,5 +1,8 @@
+use derive_more::Display;
+
 use crate::{
     expr::{self, Expr},
+    stmt,
     token::{Token, TokenType},
     Error,
 };
@@ -8,6 +11,13 @@ use crate::Result;
 
 pub struct Interpreter;
 impl Interpreter {
+    pub fn interpret(&mut self, stmts: Vec<stmt::Stmt>) -> Result<()> {
+        for stmt in stmts {
+            stmt.accept(self)?
+        }
+        Ok(())
+    }
+
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Value> {
         expr.accept(self)
     }
@@ -100,10 +110,36 @@ impl expr::Visitor for Interpreter {
     }
 }
 
+impl stmt::Visitor for Interpreter {
+    type Out = Result<()>;
+
+    fn visit_expression(&mut self, expr: &Expr) -> Self::Out {
+        self.evaluate(expr)?;
+        Ok(())
+    }
+
+    fn visit_print(&mut self, expr: &Expr) -> Self::Out {
+        let value = self.evaluate(expr)?;
+        println!("{value}");
+        Ok(())
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub enum Value {
     String(String),
     Number(f64),
     Boolean(bool),
     Nil,
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::String(string) => write!(f, "{}", string),
+            Value::Number(num) => write!(f, "{}", num),
+            Value::Boolean(boolean) => write!(f, "{}", boolean),
+            Value::Nil => write!(f, "null"),
+        }
+    }
 }

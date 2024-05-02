@@ -38,7 +38,8 @@ fn run(source: String) -> Result<()> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
+    let stmts = parser.parse()?;
     let mut interpreter = Interpreter;
-    println!("{:?}", interpreter.evaluate(&parser.parse()?)?);
+    interpreter.interpret(stmts)?;
     Ok(())
 }
