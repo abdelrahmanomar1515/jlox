@@ -18,6 +18,13 @@ pub enum Expr {
     Literal {
         value: Token,
     },
+    Variable {
+        name: Token,
+    },
+    Assignment {
+        name: Token,
+        value: Box<Expr>,
+    },
 }
 
 pub trait Visitor {
@@ -26,6 +33,8 @@ pub trait Visitor {
     fn visit_unary(&mut self, operator: &Token, right: &Expr) -> Self::Out;
     fn visit_grouping(&mut self, expr: &Expr) -> Self::Out;
     fn visit_binary(&mut self, left: &Expr, operator: &Token, right: &Expr) -> Self::Out;
+    fn visit_variable(&mut self, name: &Token) -> Self::Out;
+    fn visit_assignment(&mut self, name: &Token, value: &Expr) -> Self::Out;
 }
 
 impl Expr {
@@ -45,6 +54,11 @@ impl Expr {
                 ref operator,
             } => visitor.visit_binary(left, operator, right),
             Expr::Grouping { ref expr } => visitor.visit_grouping(expr),
+            Expr::Variable { ref name } => visitor.visit_variable(name),
+            Expr::Assignment {
+                ref name,
+                ref value,
+            } => visitor.visit_assignment(name, value),
         }
     }
 }

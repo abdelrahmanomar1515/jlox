@@ -1,6 +1,6 @@
+use crate::expr::Expr;
 use crate::stmt::Stmt;
-use crate::token::TokenType;
-use crate::{expr::Expr, token::Token};
+use crate::token::{Token, TokenType};
 use crate::{Error, Result};
 
 pub struct Parser<'a> {
@@ -16,11 +16,18 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Vec<Stmt>> {
         let mut statements = vec![];
         while !self.at_end() {
-            let statement = self.parse_statement();
-            statements.push(statement?);
+            statements.push(self.parse_declaration_statement()?);
         }
 
         Ok(statements)
+    }
+
+    fn parse_declaration_statement(&mut self) -> Result<Stmt> {
+        if let TokenType::Var = self.peek().token_type {
+            self.advance();
+            return self.parse_variable_declaration();
+        }
+        self.parse_statement()
     }
 
     fn parse_statement(&mut self) -> Result<Stmt> {
@@ -28,7 +35,6 @@ impl<'a> Parser<'a> {
             self.advance();
             return self.parse_print_statement();
         }
-        println!("parsing expression statement");
         self.parse_expression_statement()
     }
 
@@ -39,14 +45,42 @@ impl<'a> Parser<'a> {
                 self.advance();
             }
             _ => {
-                return Err(Error::ParseError(
-                    "Expected ; after print statement".to_string(),
-                ))
+                return Err(self.error("Expected ; after print statement"));
             }
         }
         Ok(Stmt::Print {
             expr: Box::new(expr),
         })
+    }
+
+    fn parse_variable_declaration(&mut self) -> Result<Stmt> {
+        let name = match self.peek().token_type {
+            TokenType::Identifier => self.advance(),
+            _ => {
+                return Err(self.error("Expected variable name"));
+            }
+        };
+        let initializer = match self.peek().token_type {
+            TokenType::Equal => {
+                self.advance();
+                let initializer = Some(Box::new(self.parse_expression()?));
+                if let TokenType::Semicolon = self.peek().token_type {
+                    self.advance();
+                } else {
+                    return Err(self.error("Expected ';' after expression"));
+                }
+                initializer
+            }
+
+            TokenType::Semicolon => {
+                self.advance();
+                None
+            }
+            _ => {
+                return Err(self.error("Expected ; after variable declaration"));
+            }
+        };
+        Ok(Stmt::VariableDeclaration { name, initializer })
     }
 
     fn parse_expression_statement(&mut self) -> Result<Stmt> {
@@ -56,9 +90,7 @@ impl<'a> Parser<'a> {
                 self.advance();
             }
             _ => {
-                return Err(Error::ParseError(
-                    "Expected ; after expression statement".to_string(),
-                ))
+                return Err(self.error("Expected ; after expression statement"));
             }
         }
         Ok(Stmt::Expression {
@@ -67,15 +99,31 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self) -> Result<Expr> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> Result<Expr> {
+        let expr = self.parse_equality()?;
+
+        if let TokenType::Equal = self.peek().token_type {
+            let _equal = self.advance();
+            let value = self.parse_assignment()?;
+            if let Expr::Variable { ref name } = &expr {
+                return Ok(Expr::Assignment {
+                    name: name.clone(),
+                    value: Box::new(value),
+                });
+            }
+            return Err(self.error("Invalid assignment target"));
+        }
+        Ok(expr)
     }
 
     fn parse_equality(&mut self) -> Result<Expr> {
         let mut expr = self.parse_comparison()?;
 
         while let TokenType::BangEqual | TokenType::EqualEqual = self.peek().token_type {
-            self.advance();
-            let operator = self.previous();
+            let operator = self.advance();
             let right = self.parse_comparison()?;
 
             expr = Expr::Binary {
@@ -163,9 +211,12 @@ impl<'a> Parser<'a> {
     fn parse_primary(&mut self) -> Result<Expr> {
         match self.peek().token_type {
             TokenType::True | TokenType::False | TokenType::Number(..) | TokenType::String(..) => {
-                self.advance();
-                let token = self.previous();
-                Ok(Expr::Literal { value: token })
+                let value = self.advance();
+                Ok(Expr::Literal { value })
+            }
+            TokenType::Identifier => {
+                let name = self.advance();
+                Ok(Expr::Variable { name })
             }
             TokenType::LeftParen => {
                 self.advance();
@@ -173,16 +224,13 @@ impl<'a> Parser<'a> {
                 if let TokenType::RightParen = self.peek().token_type {
                     self.advance();
                 } else {
-                    return Err("Expected ')' after expression.".into());
+                    return Err(self.error("Expected ')' after expression"));
                 }
                 Ok(Expr::Grouping {
                     expr: Box::new(expr),
                 })
             }
-            token => Err(Error::ParseError(format!(
-                "Expected expression found: {:?} ",
-                token
-            ))),
+            token_type => Err(self.error(&format!("Expected expression found: {:?}", token_type))),
         }
     }
 
@@ -203,5 +251,12 @@ impl<'a> Parser<'a> {
 
     fn at_end(&self) -> bool {
         matches!(self.peek().token_type, TokenType::Eof)
+    }
+
+    fn error(&self, msg: &str) -> Error {
+        Error::ParseError {
+            line: self.previous().line,
+            msg: msg.into(),
+        }
     }
 }

@@ -16,7 +16,10 @@ pub enum Error {
     #[from]
     Custom(String),
 
-    ParseError(String),
+    ParseError {
+        line: usize,
+        msg: String,
+    },
 
     FromUtf8Error(std::string::FromUtf8Error),
     IO(std::io::Error),

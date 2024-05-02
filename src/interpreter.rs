@@ -1,17 +1,20 @@
-use derive_more::Display;
-
+use crate::Result;
 use crate::{
     expr::{self, Expr},
-    stmt,
+    stmt::{self, Stmt},
     token::{Token, TokenType},
     Error,
 };
+use derive_more::Display;
+use std::collections::HashMap;
 
-use crate::Result;
+#[derive(Default)]
+pub struct Interpreter {
+    env: HashMap<String, Value>,
+}
 
-pub struct Interpreter;
 impl Interpreter {
-    pub fn interpret(&mut self, stmts: Vec<stmt::Stmt>) -> Result<()> {
+    pub fn interpret(&mut self, stmts: Vec<Stmt>) -> Result<()> {
         for stmt in stmts {
             stmt.accept(self)?
         }
@@ -108,6 +111,26 @@ impl expr::Visitor for Interpreter {
             _ => Err(Error::runtime(operator, "Unknown binary operator")),
         }
     }
+
+    fn visit_variable(&mut self, name: &Token) -> Self::Out {
+        let value = self.env.get(&name.text).ok_or(Error::RuntimeError {
+            line: name.line,
+            msg: format!("Undefined variable: {}", name.text),
+        })?;
+        Ok(value.clone())
+    }
+
+    fn visit_assignment(&mut self, name: &Token, value: &Expr) -> Self::Out {
+        let value = self.evaluate(value)?;
+        if self.env.contains_key(&name.text) {
+            self.env.insert(name.text.clone(), value.clone());
+            return Ok(value);
+        }
+        Err(Error::RuntimeError {
+            line: name.line,
+            msg: format!("Undefined variable {}", name.text),
+        })
+    }
 }
 
 impl stmt::Visitor for Interpreter {
@@ -123,9 +146,22 @@ impl stmt::Visitor for Interpreter {
         println!("{value}");
         Ok(())
     }
+
+    fn visit_variable_declaration(
+        &mut self,
+        name: &Token,
+        initializer: Option<&Expr>,
+    ) -> Self::Out {
+        let value = match initializer {
+            Some(initializer) => self.evaluate(initializer)?,
+            None => Value::Nil,
+        };
+        self.env.insert(name.text.clone(), value);
+        Ok(())
+    }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Value {
     String(String),
     Number(f64),

@@ -19,10 +19,11 @@ fn run_prompt() -> Result<()> {
     let stdin = io::stdin();
     print!("> ");
     io::stdout().flush()?;
+    let mut interpreter = Interpreter::default();
     for line in stdin.lock().lines() {
         print!("> ");
         io::stdout().flush()?;
-        if let Err(err) = run(line?) {
+        if let Err(err) = run(line?, &mut interpreter) {
             eprintln!("{err:?}")
         }
     }
@@ -31,15 +32,15 @@ fn run_prompt() -> Result<()> {
 
 fn run_file(path: &str) -> Result<()> {
     let source = fs::read(path)?;
-    run(String::from_utf8(source)?)
+    let mut interpreter = Interpreter::default();
+    run(String::from_utf8(source)?, &mut interpreter)
 }
 
-fn run(source: String) -> Result<()> {
+fn run(source: String, interpreter: &mut Interpreter) -> Result<()> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
     let stmts = parser.parse()?;
-    let mut interpreter = Interpreter;
     interpreter.interpret(stmts)?;
     Ok(())
 }

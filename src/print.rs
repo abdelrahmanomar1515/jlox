@@ -1,41 +1,41 @@
 use crate::expr::{Expr, Visitor};
 
-pub struct Printer;
-impl Printer {
-    pub fn print(&mut self, expr: &Expr) -> String {
-        expr.accept(self)
-    }
-}
+// pub struct Printer;
+// impl Printer {
+//     pub fn print(&mut self, expr: &Expr) -> String {
+//         expr.accept(self)
+//     }
+// }
 
-impl Visitor for Printer {
-    type Out = String;
-
-    fn visit_literal(&mut self, value: &crate::token::Token) -> Self::Out {
-        value.text.clone()
-    }
-
-    fn visit_unary(&mut self, operator: &crate::token::Token, right: &Expr) -> Self::Out {
-        format!("({} {})", operator.text, right.accept(self))
-    }
-
-    fn visit_grouping(&mut self, expr: &Expr) -> Self::Out {
-        format!("(group {})", expr.accept(self))
-    }
-
-    fn visit_binary(
-        &mut self,
-        left: &Expr,
-        operator: &crate::token::Token,
-        right: &Expr,
-    ) -> Self::Out {
-        format!(
-            "({} {} {})",
-            operator.text,
-            left.accept(self),
-            right.accept(self)
-        )
-    }
-}
+// impl Visitor for Printer {
+//     type Out = String;
+//
+//     fn visit_literal(&mut self, value: &crate::token::Token) -> Self::Out {
+//         value.text.clone()
+//     }
+//
+//     fn visit_unary(&mut self, operator: &crate::token::Token, right: &Expr) -> Self::Out {
+//         format!("({} {})", operator.text, right.accept(self))
+//     }
+//
+//     fn visit_grouping(&mut self, expr: &Expr) -> Self::Out {
+//         format!("(group {})", expr.accept(self))
+//     }
+//
+//     fn visit_binary(
+//         &mut self,
+//         left: &Expr,
+//         operator: &crate::token::Token,
+//         right: &Expr,
+//     ) -> Self::Out {
+//         format!(
+//             "({} {} {})",
+//             operator.text,
+//             left.accept(self),
+//             right.accept(self)
+//         )
+//     }
+// }
 
 #[cfg(test)]
 mod test {
