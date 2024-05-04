@@ -35,7 +35,27 @@ impl<'a> Parser<'a> {
             self.advance();
             return self.parse_print_statement();
         }
+        if let TokenType::LeftBrace = self.peek().token_type {
+            self.advance();
+            return self.parse_block();
+        }
         self.parse_expression_statement()
+    }
+
+    fn parse_block(&mut self) -> Result<Stmt> {
+        let mut stmts = vec![];
+        while !matches!(self.peek().token_type, TokenType::RightBrace) && !self.at_end() {
+            stmts.push(self.parse_declaration_statement()?);
+        }
+        match self.peek().token_type {
+            TokenType::RightBrace => {
+                self.advance();
+            }
+            _ => {
+                return Err(self.error("Expected } after block"));
+            }
+        }
+        Ok(Stmt::Block { stmts })
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt> {

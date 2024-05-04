@@ -12,6 +12,9 @@ pub enum Stmt {
         name: Token,
         initializer: Option<Box<Expr>>,
     },
+    Block {
+        stmts: Vec<Stmt>,
+    },
 }
 
 pub trait Visitor {
@@ -20,6 +23,7 @@ pub trait Visitor {
     fn visit_print(&mut self, expr: &Expr) -> Self::Out;
     fn visit_variable_declaration(&mut self, name: &Token, initializer: Option<&Expr>)
         -> Self::Out;
+    fn visit_block(&mut self, stmts: &[Stmt]) -> Self::Out;
 }
 
 impl Stmt {
@@ -28,12 +32,12 @@ impl Stmt {
         V: Visitor,
     {
         match self {
-            Stmt::Expression { ref expr } => visitor.visit_expression(expr),
-            Stmt::Print { ref expr } => visitor.visit_print(expr),
-            Stmt::VariableDeclaration {
-                ref name,
-                ref initializer,
-            } => visitor.visit_variable_declaration(name, initializer.as_deref()),
+            Stmt::Expression { expr } => visitor.visit_expression(expr),
+            Stmt::Print { expr } => visitor.visit_print(expr),
+            Stmt::VariableDeclaration { name, initializer } => {
+                visitor.visit_variable_declaration(name, initializer.as_deref())
+            }
+            Stmt::Block { stmts } => visitor.visit_block(stmts.as_slice()),
         }
     }
 }

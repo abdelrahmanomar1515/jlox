@@ -4,7 +4,7 @@ use token::Token;
 pub mod expr;
 pub mod interpreter;
 pub mod parser;
-pub mod print;
+// pub mod print;
 pub mod scanner;
 pub mod stmt;
 pub mod token;

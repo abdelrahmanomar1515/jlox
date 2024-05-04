@@ -6,26 +6,46 @@ use crate::{
     Error,
 };
 use derive_more::Display;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Default)]
 pub struct Interpreter {
-    env: HashMap<String, Value>,
+    env: Env,
 }
 
 impl Interpreter {
+    pub fn new() -> Self {
+        Self {
+            env: Default::default(),
+        }
+    }
+
     pub fn interpret(&mut self, stmts: Vec<Stmt>) -> Result<()> {
         for stmt in stmts {
-            stmt.accept(self)?
+            self.execute(&stmt)?
         }
         Ok(())
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Value> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<()> {
+        stmt.accept(self)
+    }
+
+    fn evaluate_block(&mut self, stmts: &[Stmt], env: Environment) -> Result<()> {
+        let previous = Rc::clone(&self.env);
+        self.env = Rc::new(RefCell::new(env));
+        let result = stmts.iter().try_for_each(|stmt| self.execute(stmt));
+        self.env = previous;
+        result
+    }
+
+    fn evaluate(&mut self, expr: &Expr) -> Result<Value> {
         expr.accept(self)
     }
 
-    pub fn is_truthy(&self, value: &Value) -> bool {
+    fn is_truthy(&self, value: &Value) -> bool {
         match *value {
             Value::String(_) => true,
             Value::Number(_) => true,
@@ -113,23 +133,12 @@ impl expr::Visitor for Interpreter {
     }
 
     fn visit_variable(&mut self, name: &Token) -> Self::Out {
-        let value = self.env.get(&name.text).ok_or(Error::RuntimeError {
-            line: name.line,
-            msg: format!("Undefined variable: {}", name.text),
-        })?;
-        Ok(value.clone())
+        self.env.borrow().get(name)
     }
 
     fn visit_assignment(&mut self, name: &Token, value: &Expr) -> Self::Out {
         let value = self.evaluate(value)?;
-        if self.env.contains_key(&name.text) {
-            self.env.insert(name.text.clone(), value.clone());
-            return Ok(value);
-        }
-        Err(Error::RuntimeError {
-            line: name.line,
-            msg: format!("Undefined variable {}", name.text),
-        })
+        self.env.borrow_mut().assign(name, &value)
     }
 }
 
@@ -156,7 +165,13 @@ impl stmt::Visitor for Interpreter {
             Some(initializer) => self.evaluate(initializer)?,
             None => Value::Nil,
         };
-        self.env.insert(name.text.clone(), value);
+        RefCell::borrow_mut(&self.env).define(name, value);
+        Ok(())
+    }
+
+    fn visit_block(&mut self, stmts: &[Stmt]) -> Self::Out {
+        let environment = Environment::new(Some(Rc::clone(&self.env)));
+        self.evaluate_block(stmts, environment)?;
         Ok(())
     }
 }
@@ -177,5 +192,55 @@ impl Display for Value {
             Value::Boolean(boolean) => write!(f, "{}", boolean),
             Value::Nil => write!(f, "null"),
         }
+    }
+}
+
+type Env = Rc<RefCell<Environment>>;
+
+#[derive(Default)]
+struct Environment {
+    enclosing: Option<Env>,
+    store: HashMap<String, Value>,
+}
+
+impl Environment {
+    fn new(enclosing: Option<Env>) -> Self {
+        Self {
+            enclosing,
+            store: HashMap::new(),
+        }
+    }
+
+    fn define(&mut self, name: &Token, value: Value) {
+        self.store.insert(name.text.clone(), value);
+    }
+
+    fn assign(&mut self, name: &Token, value: &Value) -> Result<Value> {
+        if self.store.contains_key(&name.text) {
+            self.store.insert(name.text.clone(), value.clone());
+            return Ok(value.clone());
+        }
+        if let Some(ref enclosing) = self.enclosing {
+            let mut enclosing = RefCell::borrow_mut(enclosing);
+            return enclosing.assign(name, value);
+        }
+
+        Err(Error::runtime(
+            name,
+            format!("Undefined variable {}", name.text).as_str(),
+        ))
+    }
+
+    fn get(&self, name: &Token) -> Result<Value> {
+        let value = self.store.get(&name.text);
+        if let Some(value) = value {
+            return Ok(value.clone());
+        } else if let Some(ref enclosing) = self.enclosing {
+            return RefCell::borrow(enclosing).get(name);
+        }
+        Err(Error::runtime(
+            name,
+            format!("Undefined variable: {}", name.text).as_str(),
+        ))
     }
 }
