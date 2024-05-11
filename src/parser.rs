@@ -3,6 +3,28 @@ use crate::stmt::Stmt;
 use crate::token::{Token, TokenType};
 use crate::{Error, Result};
 
+macro_rules! match_next {
+    ($self: ident, $p:pat) => {
+        if let $p = $self.peek().token_type {
+            $self.advance();
+            true
+        } else {
+            false
+        }
+    };
+}
+
+macro_rules! consume_next {
+    ($self: ident, $p:pat, $e: expr) => {
+        match $self.peek().token_type {
+            $p => $self.advance(),
+            _ => {
+                return $e;
+            }
+        }
+    };
+}
+
 pub struct Parser<'a> {
     tokens: &'a Vec<Token>,
     current: usize,
@@ -23,20 +45,17 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_declaration_statement(&mut self) -> Result<Stmt> {
-        if let TokenType::Var = self.peek().token_type {
-            self.advance();
+        if match_next!(self, TokenType::Var) {
             return self.parse_variable_declaration();
         }
         self.parse_statement()
     }
 
     fn parse_statement(&mut self) -> Result<Stmt> {
-        if let TokenType::Print = self.peek().token_type {
-            self.advance();
+        if match_next!(self, TokenType::Print) {
             return self.parse_print_statement();
         }
-        if let TokenType::LeftBrace = self.peek().token_type {
-            self.advance();
+        if match_next!(self, TokenType::LeftBrace) {
             return self.parse_block();
         }
         self.parse_expression_statement()
@@ -47,48 +66,41 @@ impl<'a> Parser<'a> {
         while !matches!(self.peek().token_type, TokenType::RightBrace) && !self.at_end() {
             stmts.push(self.parse_declaration_statement()?);
         }
-        match self.peek().token_type {
-            TokenType::RightBrace => {
-                self.advance();
-            }
-            _ => {
-                return Err(self.error("Expected } after block"));
-            }
-        }
+        consume_next!(
+            self,
+            TokenType::RightBrace,
+            Err(self.error("Expected } after block"))
+        );
         Ok(Stmt::Block { stmts })
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt> {
         let expr = self.parse_expression()?;
-        match self.peek().token_type {
-            TokenType::Semicolon => {
-                self.advance();
-            }
-            _ => {
-                return Err(self.error("Expected ; after print statement"));
-            }
-        }
+        consume_next!(
+            self,
+            TokenType::Semicolon,
+            Err(self.error("Expected ; after print statement"))
+        );
         Ok(Stmt::Print {
             expr: Box::new(expr),
         })
     }
 
     fn parse_variable_declaration(&mut self) -> Result<Stmt> {
-        let name = match self.peek().token_type {
-            TokenType::Identifier => self.advance(),
-            _ => {
-                return Err(self.error("Expected variable name"));
-            }
-        };
+        let name = consume_next!(
+            self,
+            TokenType::Identifier,
+            Err(self.error("Expected variable name"))
+        );
         let initializer = match self.peek().token_type {
             TokenType::Equal => {
                 self.advance();
                 let initializer = Some(Box::new(self.parse_expression()?));
-                if let TokenType::Semicolon = self.peek().token_type {
-                    self.advance();
-                } else {
-                    return Err(self.error("Expected ';' after expression"));
-                }
+                consume_next!(
+                    self,
+                    TokenType::Semicolon,
+                    Err(self.error("Expected ';' after expression"))
+                );
                 initializer
             }
 
@@ -105,14 +117,11 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> Result<Stmt> {
         let expr = self.parse_expression()?;
-        match self.peek().token_type {
-            TokenType::Semicolon => {
-                self.advance();
-            }
-            _ => {
-                return Err(self.error("Expected ; after expression statement"));
-            }
-        }
+        consume_next!(
+            self,
+            TokenType::Semicolon,
+            Err(self.error("Expected ; after expression statement"))
+        );
         Ok(Stmt::Expression {
             expr: Box::new(expr),
         })
@@ -125,8 +134,8 @@ impl<'a> Parser<'a> {
     fn parse_assignment(&mut self) -> Result<Expr> {
         let expr = self.parse_equality()?;
 
-        if let TokenType::Equal = self.peek().token_type {
-            let _equal = self.advance();
+        if match_next!(self, TokenType::Equal) {
+            let _equal = self.previous();
             let value = self.parse_assignment()?;
             if let Expr::Variable { ref name } = &expr {
                 return Ok(Expr::Assignment {
@@ -142,8 +151,8 @@ impl<'a> Parser<'a> {
     fn parse_equality(&mut self) -> Result<Expr> {
         let mut expr = self.parse_comparison()?;
 
-        while let TokenType::BangEqual | TokenType::EqualEqual = self.peek().token_type {
-            let operator = self.advance();
+        while match_next!(self, TokenType::BangEqual | TokenType::EqualEqual) {
+            let operator = self.previous();
             let right = self.parse_comparison()?;
 
             expr = Expr::Binary {
@@ -159,12 +168,10 @@ impl<'a> Parser<'a> {
     fn parse_comparison(&mut self) -> Result<Expr> {
         let mut expr = self.parse_term()?;
 
-        while let TokenType::Greater
-        | TokenType::GreaterEqual
-        | TokenType::Less
-        | TokenType::LessEqual = self.peek().token_type
-        {
-            self.advance();
+        while match_next!(
+            self,
+            TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual
+        ) {
             let operator = self.previous();
             let right = self.parse_term()?;
 
@@ -180,8 +187,7 @@ impl<'a> Parser<'a> {
     fn parse_term(&mut self) -> Result<Expr> {
         let mut expr = self.parse_factor()?;
 
-        while let TokenType::Minus | TokenType::Plus = self.peek().token_type {
-            self.advance();
+        while match_next!(self, TokenType::Minus | TokenType::Plus) {
             let operator = self.previous();
             let right = self.parse_factor()?;
 
@@ -197,12 +203,8 @@ impl<'a> Parser<'a> {
     fn parse_factor(&mut self) -> Result<Expr> {
         let mut expr = self.parse_unary()?;
 
-        while let operator @ Token {
-            token_type: TokenType::Slash | TokenType::Star,
-            ..
-        } = self.peek()
-        {
-            self.advance();
+        while match_next!(self, TokenType::Slash | TokenType::Star) {
+            let operator = self.previous();
             let right = self.parse_unary()?;
 
             expr = Expr::Binary {
@@ -215,8 +217,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_unary(&mut self) -> Result<Expr> {
-        if let TokenType::Bang | TokenType::Minus = self.peek().token_type {
-            self.advance();
+        if match_next!(self, TokenType::Bang | TokenType::Minus) {
             let operator = self.previous();
             let right = self.parse_unary()?;
 
@@ -241,11 +242,11 @@ impl<'a> Parser<'a> {
             TokenType::LeftParen => {
                 self.advance();
                 let expr = self.parse_expression()?;
-                if let TokenType::RightParen = self.peek().token_type {
-                    self.advance();
-                } else {
-                    return Err(self.error("Expected ')' after expression"));
-                }
+                consume_next!(
+                    self,
+                    TokenType::RightParen,
+                    Err(self.error("Expected ')' after expression"))
+                );
                 Ok(Expr::Grouping {
                     expr: Box::new(expr),
                 })
