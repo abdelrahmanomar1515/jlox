@@ -25,6 +25,16 @@ pub enum Expr {
         name: Token,
         value: Box<Expr>,
     },
+    LogicOr {
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>,
+    },
+    LogicAnd {
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>,
+    },
 }
 
 pub trait Visitor {
@@ -35,6 +45,8 @@ pub trait Visitor {
     fn visit_binary(&mut self, left: &Expr, operator: &Token, right: &Expr) -> Self::Out;
     fn visit_variable(&mut self, name: &Token) -> Self::Out;
     fn visit_assignment(&mut self, name: &Token, value: &Expr) -> Self::Out;
+    fn visit_logic_or(&mut self, left: &Expr, right: &Expr) -> Self::Out;
+    fn visit_logic_and(&mut self, left: &Expr, right: &Expr) -> Self::Out;
 }
 
 impl Expr {
@@ -59,6 +71,16 @@ impl Expr {
                 ref name,
                 ref value,
             } => visitor.visit_assignment(name, value),
+            Expr::LogicOr {
+                ref left,
+                ref right,
+                ..
+            } => visitor.visit_logic_or(left, right),
+            Expr::LogicAnd {
+                ref left,
+                ref right,
+                ..
+            } => visitor.visit_logic_and(left, right),
         }
     }
 }

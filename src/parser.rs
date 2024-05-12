@@ -132,7 +132,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_assignment(&mut self) -> Result<Expr> {
-        let expr = self.parse_equality()?;
+        let expr = self.parse_logic_or()?;
 
         if match_next!(self, TokenType::Equal) {
             let _equal = self.previous();
@@ -144,6 +144,34 @@ impl<'a> Parser<'a> {
                 });
             }
             return Err(self.error("Invalid assignment target"));
+        }
+        Ok(expr)
+    }
+
+    fn parse_logic_or(&mut self) -> Result<Expr> {
+        let mut expr = self.parse_logic_and()?;
+        while match_next!(self, TokenType::Or) {
+            let operator = self.previous();
+            let right = self.parse_logic_and()?;
+            expr = Expr::LogicOr {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_logic_and(&mut self) -> Result<Expr> {
+        let mut expr = self.parse_equality()?;
+        while match_next!(self, TokenType::And) {
+            let operator = self.previous();
+            let right = self.parse_equality()?;
+            expr = Expr::LogicAnd {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+            };
         }
         Ok(expr)
     }
@@ -231,7 +259,11 @@ impl<'a> Parser<'a> {
 
     fn parse_primary(&mut self) -> Result<Expr> {
         match self.peek().token_type {
-            TokenType::True | TokenType::False | TokenType::Number(..) | TokenType::String(..) => {
+            TokenType::True
+            | TokenType::False
+            | TokenType::Number(..)
+            | TokenType::String(..)
+            | TokenType::Nil => {
                 let value = self.advance();
                 Ok(Expr::Literal { value })
             }

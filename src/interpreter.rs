@@ -140,6 +140,24 @@ impl expr::Visitor for Interpreter {
         let value = self.evaluate(value)?;
         self.env.borrow_mut().assign(name, &value)
     }
+
+    fn visit_logic_or(&mut self, left: &Expr, right: &Expr) -> Self::Out {
+        let value = self.evaluate(left)?;
+        if self.is_truthy(&value) {
+            Ok(value)
+        } else {
+            self.evaluate(right)
+        }
+    }
+
+    fn visit_logic_and(&mut self, left: &Expr, right: &Expr) -> Self::Out {
+        let value = self.evaluate(left)?;
+        if self.is_truthy(&value) {
+            self.evaluate(right)
+        } else {
+            Ok(value)
+        }
+    }
 }
 
 impl stmt::Visitor for Interpreter {
