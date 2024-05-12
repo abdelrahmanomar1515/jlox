@@ -192,6 +192,32 @@ impl stmt::Visitor for Interpreter {
         self.evaluate_block(stmts, environment)?;
         Ok(())
     }
+
+    fn visit_if(
+        &mut self,
+        condition: &Expr,
+        then_branch: &Stmt,
+        else_branch: Option<&Stmt>,
+    ) -> Self::Out {
+        let condition = &self.evaluate(condition)?;
+        if self.is_truthy(condition) {
+            self.execute(then_branch)?;
+        } else if let Some(else_branch) = else_branch {
+            self.execute(else_branch)?;
+        }
+        Ok(())
+    }
+
+    fn visit_while(&mut self, condition: &Expr, body: &Stmt) -> Self::Out {
+        loop {
+            let condition_result = &self.evaluate(condition)?;
+            if !self.is_truthy(condition_result) {
+                break;
+            }
+            self.execute(body)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]

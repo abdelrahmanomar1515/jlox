@@ -19,7 +19,7 @@ macro_rules! consume_next {
         match $self.peek().token_type {
             $p => $self.advance(),
             _ => {
-                return $e;
+                return Err($self.error($e));
             }
         }
     };
@@ -52,6 +52,15 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> Result<Stmt> {
+        if match_next!(self, TokenType::For) {
+            return self.parse_for_statement();
+        }
+        if match_next!(self, TokenType::If) {
+            return self.parse_if_statement();
+        }
+        if match_next!(self, TokenType::While) {
+            return self.parse_while_loop();
+        }
         if match_next!(self, TokenType::Print) {
             return self.parse_print_statement();
         }
@@ -66,41 +75,120 @@ impl<'a> Parser<'a> {
         while !matches!(self.peek().token_type, TokenType::RightBrace) && !self.at_end() {
             stmts.push(self.parse_declaration_statement()?);
         }
+        consume_next!(self, TokenType::RightBrace, "Expect } after block");
+        Ok(Stmt::Block { stmts })
+    }
+
+    fn parse_for_statement(&mut self) -> Result<Stmt> {
+        consume_next!(self, TokenType::LeftParen, "Expect '(' after 'for'.");
+        let initializer = match self.peek().token_type {
+            TokenType::Var => {
+                self.advance();
+                Some(self.parse_variable_declaration()?)
+            }
+            TokenType::Semicolon => {
+                self.advance();
+                None
+            }
+            _ => Some(self.parse_expression_statement()?),
+        };
+
+        let condition = match self.peek().token_type {
+            TokenType::Semicolon => Expr::Literal {
+                value: Token::new(TokenType::True, "true".to_string(), self.peek().line),
+            },
+            _ => self.parse_expression()?,
+        };
         consume_next!(
             self,
-            TokenType::RightBrace,
-            Err(self.error("Expected } after block"))
+            TokenType::Semicolon,
+            "Expect ';' after loop condition."
         );
-        Ok(Stmt::Block { stmts })
+
+        let increment = match self.peek().token_type {
+            TokenType::RightParen => None,
+            _ => Some(self.parse_expression()?),
+        };
+        consume_next!(self, TokenType::RightParen, "Expect ')' after for clauses.");
+        let mut body = self.parse_statement()?;
+
+        if let Some(increment) = increment {
+            body = Stmt::Block {
+                stmts: vec![
+                    body,
+                    Stmt::Expression {
+                        expr: Box::new(increment),
+                    },
+                ],
+            }
+        }
+
+        body = Stmt::While {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        };
+
+        if let Some(initializer) = initializer {
+            body = Stmt::Block {
+                stmts: vec![initializer, body],
+            }
+        }
+
+        Ok(body)
+    }
+
+    fn parse_if_statement(&mut self) -> Result<Stmt> {
+        consume_next!(self, TokenType::LeftParen, "Expect '(' after 'if'.");
+        let condition = self.parse_expression()?;
+        consume_next!(
+            self,
+            TokenType::RightParen,
+            "Expect ')' after if condition."
+        );
+
+        let then_branch = self.parse_statement()?;
+        let mut else_branch = None;
+
+        if match_next!(self, TokenType::Else) {
+            else_branch = Some(self.parse_statement()?);
+        }
+        Ok(Stmt::If {
+            condition: Box::new(condition),
+            then_branch: Box::new(then_branch),
+            else_branch: else_branch.map(Box::new),
+        })
+    }
+
+    fn parse_while_loop(&mut self) -> Result<Stmt> {
+        consume_next!(self, TokenType::LeftParen, "Expect '(' after 'if'.");
+        let condition = self.parse_expression()?;
+        consume_next!(
+            self,
+            TokenType::RightParen,
+            "Expect ')' after if condition."
+        );
+        let body = self.parse_statement()?;
+        Ok(Stmt::While {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        })
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt> {
         let expr = self.parse_expression()?;
-        consume_next!(
-            self,
-            TokenType::Semicolon,
-            Err(self.error("Expected ; after print statement"))
-        );
+        consume_next!(self, TokenType::Semicolon, "Expect ; after print statement");
         Ok(Stmt::Print {
             expr: Box::new(expr),
         })
     }
 
     fn parse_variable_declaration(&mut self) -> Result<Stmt> {
-        let name = consume_next!(
-            self,
-            TokenType::Identifier,
-            Err(self.error("Expected variable name"))
-        );
+        let name = consume_next!(self, TokenType::Identifier, "Expect variable name");
         let initializer = match self.peek().token_type {
             TokenType::Equal => {
                 self.advance();
                 let initializer = Some(Box::new(self.parse_expression()?));
-                consume_next!(
-                    self,
-                    TokenType::Semicolon,
-                    Err(self.error("Expected ';' after expression"))
-                );
+                consume_next!(self, TokenType::Semicolon, "Expect ';' after expression");
                 initializer
             }
 
@@ -109,7 +197,7 @@ impl<'a> Parser<'a> {
                 None
             }
             _ => {
-                return Err(self.error("Expected ; after variable declaration"));
+                return Err(self.error("Expect ; after variable declaration"));
             }
         };
         Ok(Stmt::VariableDeclaration { name, initializer })
@@ -120,7 +208,7 @@ impl<'a> Parser<'a> {
         consume_next!(
             self,
             TokenType::Semicolon,
-            Err(self.error("Expected ; after expression statement"))
+            "Expect ; after expression statement"
         );
         Ok(Stmt::Expression {
             expr: Box::new(expr),
@@ -274,16 +362,12 @@ impl<'a> Parser<'a> {
             TokenType::LeftParen => {
                 self.advance();
                 let expr = self.parse_expression()?;
-                consume_next!(
-                    self,
-                    TokenType::RightParen,
-                    Err(self.error("Expected ')' after expression"))
-                );
+                consume_next!(self, TokenType::RightParen, "Expect ')' after expression");
                 Ok(Expr::Grouping {
                     expr: Box::new(expr),
                 })
             }
-            token_type => Err(self.error(&format!("Expected expression found: {:?}", token_type))),
+            token_type => Err(self.error(&format!("Expect expression found: {:?}", token_type))),
         }
     }
 
