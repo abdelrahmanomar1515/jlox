@@ -1,3 +1,4 @@
+use crate::stmt::FunctionDeclaration;
 use crate::Result;
 use crate::{
     expr::{self, Expr},
@@ -9,16 +10,118 @@ use derive_more::Display;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::SystemTime;
 
-#[derive(Default)]
+trait Callable {
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value], paren: &Token) -> Result<Value>;
+    fn arity(&self) -> usize;
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct NativeFunction {
+    arity: usize,
+    name: String,
+    function: fn(&mut Interpreter, &[Value]) -> Value,
+}
+
+impl Callable for NativeFunction {
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value], _paren: &Token) -> Result<Value> {
+        Ok((self.function)(interpreter, args))
+    }
+
+    fn arity(&self) -> usize {
+        self.arity
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Function {
+    declaration: FunctionDeclaration,
+}
+
+impl Callable for Function {
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value], paren: &Token) -> Result<Value> {
+        if args.len() != self.arity() {
+            return Err(Error::runtime(
+                paren,
+                &format!(
+                    "Expected {} arguments but got {} arguments",
+                    self.arity(),
+                    args.len(),
+                ),
+            ));
+        };
+
+        let mut environment = Environment::new(Some(interpreter.env.clone()));
+        self.declaration
+            .params
+            .iter()
+            .enumerate()
+            .for_each(|(i, param)| environment.define(param, args[i].clone()));
+
+        interpreter.execute_block(&self.declaration.body, environment)?;
+
+        Ok(Value::Nil)
+    }
+
+    fn arity(&self) -> usize {
+        self.declaration.params.len()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Value {
+    String(String),
+    Number(f64),
+    Boolean(bool),
+    Function(Function),
+    NativeFunction(NativeFunction),
+    Nil,
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::String(string) => write!(f, "{}", string),
+            Value::Number(num) => write!(f, "{}", num),
+            Value::Boolean(boolean) => write!(f, "{}", boolean),
+            Value::Function(Function {
+                declaration: FunctionDeclaration { name, .. },
+                ..
+            }) => write!(f, "<function {}>", name.text),
+            Value::NativeFunction(NativeFunction { name, .. }) => {
+                write!(f, "<native function {}>", name)
+            }
+            Value::Nil => write!(f, "null"),
+        }
+    }
+}
+
 pub struct Interpreter {
     env: Env,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
+        let mut env = Environment::default();
+        env.store.insert(
+            "clock".to_string(),
+            Value::NativeFunction(NativeFunction {
+                arity: 0,
+                name: "clock".to_string(),
+                function: |_interpreter, _args| {
+                    Value::Number(
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .expect("Clock may have gone backwards")
+                            .as_millis() as f64
+                            / 1000.0,
+                    )
+                },
+            }),
+        );
         Self {
-            env: Default::default(),
+            env: Rc::new(RefCell::new(env)),
         }
     }
 
@@ -33,7 +136,7 @@ impl Interpreter {
         stmt.accept(self)
     }
 
-    fn evaluate_block(&mut self, stmts: &[Stmt], env: Environment) -> Result<()> {
+    fn execute_block(&mut self, stmts: &[Stmt], env: Environment) -> Result<()> {
         let previous = Rc::clone(&self.env);
         self.env = Rc::new(RefCell::new(env));
         let result = stmts.iter().try_for_each(|stmt| self.execute(stmt));
@@ -50,8 +153,16 @@ impl Interpreter {
             Value::String(_) => true,
             Value::Number(_) => true,
             Value::Boolean(v) => v,
+            Value::Function(_) => false,
+            Value::NativeFunction(_) => false,
             Value::Nil => false,
         }
+    }
+}
+
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -80,6 +191,32 @@ impl expr::Visitor for Interpreter {
             TokenType::Bang => Ok(Value::Boolean(self.is_truthy(&right))),
             _ => Err(Error::runtime(operator, "Unknown unary operator")),
         }
+    }
+
+    fn visit_call(&mut self, callee: &Expr, paren: &Token, args: &[Expr]) -> Self::Out {
+        let callee = self.evaluate(callee)?;
+        let args = args
+            .iter()
+            .map(|arg| self.evaluate(arg))
+            .collect::<Result<Vec<_>>>()?;
+        let callable: Box<dyn Callable> = match callee {
+            Value::NativeFunction(f) => Box::new(f),
+            Value::Function(f) => Box::new(f),
+            _ => {
+                return Err(Error::runtime(paren, "Can only call functions and classes"));
+            }
+        };
+        if args.len() != callable.arity() {
+            return Err(Error::runtime(
+                paren,
+                &format!(
+                    "Expected {} arguments but got {} arguments",
+                    callable.arity(),
+                    args.len(),
+                ),
+            ));
+        };
+        callable.call(self, &args, paren)
     }
 
     fn visit_grouping(&mut self, expr: &Expr) -> Self::Out {
@@ -174,6 +311,21 @@ impl stmt::Visitor for Interpreter {
         Ok(())
     }
 
+    fn visit_function_declaration(
+        &mut self,
+        function_declaration: &FunctionDeclaration,
+    ) -> Self::Out {
+        let function = Function {
+            declaration: function_declaration.clone(),
+        };
+        self.env.borrow_mut().define(
+            &function_declaration.name,
+            Value::Function(function).clone(),
+        );
+
+        Ok(())
+    }
+
     fn visit_variable_declaration(
         &mut self,
         name: &Token,
@@ -189,7 +341,7 @@ impl stmt::Visitor for Interpreter {
 
     fn visit_block(&mut self, stmts: &[Stmt]) -> Self::Out {
         let environment = Environment::new(Some(Rc::clone(&self.env)));
-        self.evaluate_block(stmts, environment)?;
+        self.execute_block(stmts, environment)?;
         Ok(())
     }
 
@@ -217,25 +369,6 @@ impl stmt::Visitor for Interpreter {
             self.execute(body)?;
         }
         Ok(())
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum Value {
-    String(String),
-    Number(f64),
-    Boolean(bool),
-    Nil,
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::String(string) => write!(f, "{}", string),
-            Value::Number(num) => write!(f, "{}", num),
-            Value::Boolean(boolean) => write!(f, "{}", boolean),
-            Value::Nil => write!(f, "null"),
-        }
     }
 }
 

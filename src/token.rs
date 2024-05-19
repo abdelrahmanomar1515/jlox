@@ -1,6 +1,6 @@
 use core::f64;
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum TokenType {
     // Single-character tokens.
     LeftParen,
@@ -51,7 +51,7 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub text: String,

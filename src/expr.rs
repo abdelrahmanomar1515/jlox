@@ -1,6 +1,6 @@
 use crate::token::Token;
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Expr {
     Binary {
         left: Box<Expr>,
@@ -10,6 +10,11 @@ pub enum Expr {
     Unary {
         operator: Token,
         right: Box<Expr>,
+    },
+    Call {
+        callee: Box<Expr>,
+        paren: Token,
+        args: Vec<Expr>,
     },
     Grouping {
         expr: Box<Expr>,
@@ -41,6 +46,7 @@ pub trait Visitor {
     type Out;
     fn visit_literal(&mut self, value: &Token) -> Self::Out;
     fn visit_unary(&mut self, operator: &Token, right: &Expr) -> Self::Out;
+    fn visit_call(&mut self, callee: &Expr, paren: &Token, args: &[Expr]) -> Self::Out;
     fn visit_grouping(&mut self, expr: &Expr) -> Self::Out;
     fn visit_binary(&mut self, left: &Expr, operator: &Token, right: &Expr) -> Self::Out;
     fn visit_variable(&mut self, name: &Token) -> Self::Out;
@@ -65,6 +71,11 @@ impl Expr {
                 ref right,
                 ref operator,
             } => visitor.visit_binary(left, operator, right),
+            Expr::Call {
+                ref callee,
+                ref paren,
+                ref args,
+            } => visitor.visit_call(callee, paren, args),
             Expr::Grouping { ref expr } => visitor.visit_grouping(expr),
             Expr::Variable { ref name } => visitor.visit_variable(name),
             Expr::Assignment {
