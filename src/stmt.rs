@@ -9,6 +9,10 @@ pub enum Stmt {
     Print {
         expr: Box<Expr>,
     },
+    Return {
+        keyword: Token,
+        value: Option<Box<Expr>>,
+    },
     VariableDeclaration {
         name: Token,
         initializer: Option<Box<Expr>>,
@@ -42,6 +46,7 @@ pub trait Visitor {
         &mut self,
         function_declaration: &FunctionDeclaration,
     ) -> Self::Out;
+    fn visit_return(&mut self, keyword: &Token, value: Option<&Expr>) -> Self::Out;
     fn visit_variable_declaration(&mut self, name: &Token, initializer: Option<&Expr>)
         -> Self::Out;
     fn visit_block(&mut self, stmts: &[Stmt]) -> Self::Out;
@@ -63,6 +68,8 @@ impl Stmt {
             Stmt::Expression { expr } => visitor.visit_expression(expr),
             Stmt::Print { expr } => visitor.visit_print(expr),
             Stmt::FunctionDeclaration(function) => visitor.visit_function_declaration(function),
+            Stmt::While { condition, body } => visitor.visit_while(condition, body),
+            Stmt::Return { keyword, value } => visitor.visit_return(keyword, value.as_deref()),
             Stmt::VariableDeclaration { name, initializer } => {
                 visitor.visit_variable_declaration(name, initializer.as_deref())
             }
@@ -72,7 +79,6 @@ impl Stmt {
                 then_branch,
                 else_branch,
             } => visitor.visit_if(condition, then_branch, else_branch.as_deref()),
-            Stmt::While { condition, body } => visitor.visit_while(condition, body),
         }
     }
 }

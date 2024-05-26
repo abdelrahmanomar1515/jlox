@@ -1,4 +1,5 @@
 use derive_more::From;
+use interpreter::Value;
 use token::Token;
 
 pub mod expr;
@@ -27,6 +28,11 @@ pub enum Error {
     RuntimeError {
         line: usize,
         msg: String,
+    },
+
+    Return {
+        line: usize,
+        value: Value,
     },
 }
 

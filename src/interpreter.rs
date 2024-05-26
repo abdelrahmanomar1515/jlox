@@ -37,6 +37,7 @@ impl Callable for NativeFunction {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Function {
     declaration: FunctionDeclaration,
+    closure: Env,
 }
 
 impl Callable for Function {
@@ -52,16 +53,17 @@ impl Callable for Function {
             ));
         };
 
-        let mut environment = Environment::new(Some(interpreter.env.clone()));
+        let mut scope = Environment::new(Some(self.closure.clone()));
         self.declaration
             .params
             .iter()
             .enumerate()
-            .for_each(|(i, param)| environment.define(param, args[i].clone()));
+            .for_each(|(i, param)| scope.define(param, args[i].clone()));
 
-        interpreter.execute_block(&self.declaration.body, environment)?;
-
-        Ok(Value::Nil)
+        match interpreter.execute_block(&self.declaration.body, scope) {
+            Err(Error::Return { value, .. }) => Ok(value),
+            _ => Ok(Value::Nil),
+        }
     }
 
     fn arity(&self) -> usize {
@@ -317,6 +319,7 @@ impl stmt::Visitor for Interpreter {
     ) -> Self::Out {
         let function = Function {
             declaration: function_declaration.clone(),
+            closure: self.env.clone(),
         };
         self.env.borrow_mut().define(
             &function_declaration.name,
@@ -324,6 +327,18 @@ impl stmt::Visitor for Interpreter {
         );
 
         Ok(())
+    }
+
+    fn visit_return(&mut self, keyword: &Token, value: Option<&Expr>) -> Self::Out {
+        let value = match value {
+            Some(expr) => self.evaluate(expr)?,
+            None => Value::Nil,
+        };
+
+        Err(Error::Return {
+            line: keyword.line,
+            value,
+        })
     }
 
     fn visit_variable_declaration(
@@ -374,7 +389,7 @@ impl stmt::Visitor for Interpreter {
 
 type Env = Rc<RefCell<Environment>>;
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 struct Environment {
     enclosing: Option<Env>,
     store: HashMap<String, Value>,

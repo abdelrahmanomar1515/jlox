@@ -48,6 +48,9 @@ impl<'a> Parser<'a> {
         if match_next!(self, TokenType::Fun) {
             return self.parse_function_declaration("function");
         }
+        if match_next!(self, TokenType::Return) {
+            return self.parse_return();
+        }
         if match_next!(self, TokenType::Var) {
             return self.parse_variable_declaration();
         }
@@ -230,6 +233,18 @@ impl<'a> Parser<'a> {
             params,
             body: stmts,
         }))
+    }
+
+    fn parse_return(&mut self) -> Result<Stmt> {
+        let keyword = self.previous();
+        let value = match self.peek().token_type {
+            TokenType::Semicolon => None,
+            _ => Some(Box::new(self.parse_expression()?)),
+        };
+
+        consume_next!(self, TokenType::Semicolon, "Expect ';' after return value");
+
+        Ok(Stmt::Return { keyword, value })
     }
 
     fn parse_variable_declaration(&mut self) -> Result<Stmt> {
